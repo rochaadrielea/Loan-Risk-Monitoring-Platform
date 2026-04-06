@@ -112,11 +112,10 @@ def run_pipeline(config: dict, session_dir: Path) -> dict:
     observations = [f for f in all_findings if f.is_observation]
     suggestions  = SuggestionEngine(issues, config).generate()
 
-    # Drift detection — reset baseline per session so stale state never contaminates a fresh upload
+    # Drift detection — baseline persists across uploads so changes are detected.
+    # To reset: delete output/schema_baseline.json manually before uploading.
     _APP_DIR = Path(__file__).parent.resolve()
     baseline_path = _APP_DIR / "output" / "schema_baseline.json"
-    if baseline_path.exists():
-        baseline_path.unlink()
     drift_detector = SchemaDriftDetector(baseline_path)
     drift_events   = drift_detector.check(tables, config)
     drift_detector.save(tables, config)

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DAX Design Decisions — Graian Capital Management</title>
+<title>DAX Design Decisions: Graian Capital Management</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap');
 
@@ -472,23 +472,22 @@
   <div class="section">
     <div class="section-label">Foundation</div>
     <h2>Three Design Principles Applied to Every Measure</h2>
-    <p>Every DAX measure in this model was built around three principles that ensure reliability across any dataset — not just the one used in development.</p>
 
     <div class="principles">
       <div class="principle-card">
         <div class="principle-number">01</div>
         <div class="principle-title">LN Filter in DAX</div>
-        <p class="principle-desc">Applied inside CALCULATE — not in Power Query — so it holds regardless of what new product types appear in future datasets.</p>
+        <p class="principle-desc">Applied inside CALCULATE (not in Power Query) so it holds regardless of what new product types appear in future datasets.</p>
       </div>
       <div class="principle-card">
         <div class="principle-number">02</div>
         <div class="principle-title">DIVIDE() not /</div>
-        <p class="principle-desc">Zero-safe division that never breaks charts when the denominator is zero. Returns BLANK instead of error.</p>
+        <p class="principle-desc">Zero-safe division. Returns BLANK instead of error when the denominator is zero. Never breaks charts.</p>
       </div>
       <div class="principle-card">
         <div class="principle-number">03</div>
-        <div class="principle-title">LASTNONBLANK for FX</div>
-        <p class="principle-desc">Adapts to any date range automatically. No hardcoded rates. Works when fx and prices tables have different date coverage.</p>
+        <div class="principle-title">LASTNONBLANK for FX/Prices</div>
+        <p class="principle-desc">Adapts to any date range automatically. No hardcoded rates. Works when fx and prices tables have different date coverage than transactions.</p>
       </div>
     </div>
   </div>
@@ -499,15 +498,14 @@
   <div class="section">
     <div class="section-label">Measure 1</div>
     <h2>Loan Exposure</h2>
-    <p>Calculates the total net loan value from LN-type transactions only. Uses the VAR pattern to eliminate floating point artifacts that appear when buys and sells cancel out exactly.</p>
+    <p>Net loan value from LN-type transactions only. The VAR pattern eliminates floating point artifacts that appear when buys and sells cancel out exactly.</p>
 
     <div class="code-wrapper">
       <div class="code-header">
-        <span class="code-title">transactions table · Home measure</span>
+        <span class="code-title">transactions table</span>
         <span class="code-lang">DAX</span>
       </div>
-      <pre><span class="cm">-- VAR pattern: calculate first, apply business logic after</span>
-<span class="kw">Loan Exposure</span> =
+      <pre><span class="kw">Loan Exposure</span> =
 <span class="kw">VAR</span> Result =
     <span class="fn">ROUND</span>(
         <span class="fn">CALCULATE</span>(
@@ -521,27 +519,17 @@
         <span class="num">2</span>
     )
 <span class="kw">RETURN</span>
-    <span class="cm">-- If net position = 0, return BLANK so Power BI hides automatically</span>
     <span class="fn">IF</span>(Result = <span class="num">0</span>, <span class="fn">BLANK</span>(), Result)</pre>
     </div>
 
-    <h3>Why This Pattern</h3>
     <div class="reasoning">
       <div class="reasoning-row">
-        <div class="reasoning-label">The Problem</div>
-        <div class="reasoning-content">Floating point arithmetic in DAX produces values like 5.8E-11 when buys and sells cancel out perfectly. This is not zero — it is a binary rounding artifact. Power BI renders it as a bar or label.</div>
+        <div class="reasoning-label">Why VAR + BLANK()</div>
+        <div class="reasoning-content">Floating point arithmetic produces values like 5.8E-11 when buys and sells cancel exactly. ROUND fixes display but not logic: a rounded 0.00 is still not BLANK and Power BI still renders the bar. VAR + IF(Result = 0, BLANK()) removes the bar at source.</div>
       </div>
       <div class="reasoning-row">
-        <div class="reasoning-label">Why Not ROUND</div>
-        <div class="reasoning-content">ROUND fixes the display but not the logic. A rounded 0.00 is still not BLANK — Power BI still renders the bar.</div>
-      </div>
-      <div class="reasoning-row">
-        <div class="reasoning-label">Why Not a Filter</div>
-        <div class="reasoning-content">Any hardcoded threshold like <span class="tag tag-red">&gt; 0.001</span> risks hiding real future data. A new dataset might have legitimate small positions below any chosen threshold.</div>
-      </div>
-      <div class="reasoning-row">
-        <div class="reasoning-label">The Solution</div>
-        <div class="reasoning-content">VAR + <span class="tag tag-green">BLANK()</span> — if the net position is exactly zero after rounding, it has no current exposure and should not appear. BLANK() is Power BI's native signal to hide. No filters needed anywhere.</div>
+        <div class="reasoning-label">Why LN in CALCULATE</div>
+        <div class="reasoning-content">Filtering in CALCULATE (not Power Query) means the filter applies dynamically. If a new product type arrives in a future dataset, the measure still returns only LN exposure with zero model changes.</div>
       </div>
     </div>
   </div>
@@ -552,25 +540,32 @@
   <div class="section">
     <div class="section-label">Measure 2</div>
     <h2>Loan Exposure %</h2>
-    <p>Expresses loan exposure as a percentage of total portfolio value. Inherits the BLANK behaviour from Loan Exposure automatically — no additional logic required.</p>
+    <p>Loan exposure expressed as a percentage of total portfolio value. The IF wrapper makes closed positions return BLANK (consistent with Loan Exposure behaviour).</p>
 
     <div class="code-wrapper">
       <div class="code-header">
         <span class="code-title">transactions table</span>
         <span class="code-lang">DAX</span>
       </div>
-      <pre><span class="cm">-- DIVIDE returns BLANK when [Loan Exposure] is BLANK</span>
-<span class="cm">-- No additional IF() needed — cascades automatically</span>
-<span class="kw">Loan Exposure %</span> =
-<span class="fn">DIVIDE</span>(
-    <span class="ref">[Loan Exposure]</span>,
-    <span class="ref">[Portfolio Value]</span>
-)</pre>
+      <pre><span class="kw">Loan Exposure %</span> =
+<span class="kw">VAR</span> Result =
+    <span class="fn">DIVIDE</span>(
+        <span class="ref">[Loan Exposure]</span>,
+        <span class="ref">[Portfolio Value]</span>
+    )
+<span class="kw">RETURN</span>
+    <span class="fn">IF</span>(Result = <span class="num">0</span>, <span class="fn">BLANK</span>(), Result)</pre>
     </div>
 
-    <div class="callout">
-      <div class="callout-title">Cascade Effect</div>
-      <p>Because DIVIDE([Loan Exposure], anything) returns BLANK when the numerator is BLANK, fixing Loan Exposure once cascades automatically to Loan Exposure %. One fix at source, correct behaviour everywhere.</p>
+    <div class="reasoning">
+      <div class="reasoning-row">
+        <div class="reasoning-label">Why DIVIDE()</div>
+        <div class="reasoning-content">DIVIDE() returns BLANK when Portfolio Value is zero or BLANK. Using / would return an error and break the visual. DIVIDE() is always correct here.</div>
+      </div>
+      <div class="reasoning-row">
+        <div class="reasoning-label">Why IF wrapper</div>
+        <div class="reasoning-content">When [Loan Exposure] is BLANK, DIVIDE returns BLANK automatically. The IF(Result = 0, BLANK()) handles the edge case where both measures return a valid zero (no net position). Keeps behaviour consistent with Loan Exposure.</div>
+      </div>
     </div>
   </div>
 
@@ -580,38 +575,68 @@
   <div class="section">
     <div class="section-label">Measure 3</div>
     <h2>Avg LTV</h2>
-    <p>Calculates average loan-to-value ratio excluding statistical outliers. Uses the same 3×IQR method as the Python pipeline — methodology is consistent across both tools.</p>
+    <p>Average loan-to-value ratio for LN products, excluding statistical outliers. The IQR fence is computed dynamically inside the measure so no separate column is needed for filtering.</p>
 
     <div class="code-wrapper">
       <div class="code-header">
         <span class="code-title">transactions table</span>
         <span class="code-lang">DAX</span>
       </div>
-      <pre><span class="cm">-- Dynamic outlier exclusion via 3×IQR fence</span>
-<span class="cm">-- Matches exact same method used in Python pipeline</span>
-<span class="kw">Avg LTV</span> =
-<span class="fn">AVERAGEX</span>(
-    <span class="fn">FILTER</span>(
-        <span class="tbl">products</span>,
-        <span class="tbl">products</span>[product-type] = <span class="str">"LN"</span> &&
-        <span class="tbl">products</span>[outlier-flag] = <span class="str">"OK"</span>
-    ),
-    <span class="fn">DIVIDE</span>(<span class="num">1</span>, <span class="tbl">products</span>[loan-property-value-ratio])
+      <pre><span class="kw">Avg LTV</span> =
+<span class="kw">VAR</span> Q1 = <span class="fn">PERCENTILE.INC</span>(<span class="tbl">products</span>[loan-property-value-ratio], <span class="num">0.25</span>)
+<span class="kw">VAR</span> Q3 = <span class="fn">PERCENTILE.INC</span>(<span class="tbl">products</span>[loan-property-value-ratio], <span class="num">0.75</span>)
+<span class="kw">VAR</span> IQR = Q3 - Q1
+<span class="kw">VAR</span> UpperFence = Q3 + <span class="num">3</span> * IQR
+<span class="kw">VAR</span> LowerFence = Q1 - <span class="num">3</span> * IQR
+<span class="kw">RETURN</span>
+<span class="fn">CALCULATE</span>(
+    <span class="fn">AVERAGEX</span>(
+        <span class="fn">FILTER</span>(<span class="tbl">products</span>,
+            <span class="tbl">products</span>[product-type] = <span class="str">"LN"</span>
+            && <span class="tbl">products</span>[loan-property-value-ratio] &lt;= UpperFence
+            && <span class="tbl">products</span>[loan-property-value-ratio] &gt;= LowerFence
+        ),
+        <span class="fn">DIVIDE</span>(<span class="num">1</span>, <span class="tbl">products</span>[loan-property-value-ratio])
+    )
 )</pre>
     </div>
 
     <div class="reasoning">
       <div class="reasoning-row">
         <div class="reasoning-label">LTV Formula</div>
-        <div class="reasoning-content">The brief provides <code>loan-property-value-ratio</code> which is the inverse of LTV. LTV = 1 / loan-property-value-ratio. DIVIDE() used for zero safety.</div>
+        <div class="reasoning-content">The source column is loan-property-value-ratio (the inverse of LTV). LTV = 1 / ratio. DIVIDE() handles the zero case. Raw data is never modified.</div>
       </div>
       <div class="reasoning-row">
         <div class="reasoning-label">Outlier Exclusion</div>
-        <div class="reasoning-content">PR-P4N4N has a ratio of 33.33 — LTV of 0.03. Including it would pull the average to a meaningless number. The outlier-flag calculated column excludes values outside Q1−3×IQR and Q3+3×IQR dynamically.</div>
+        <div class="reasoning-content">PR-P4N4N has a ratio of 33.33 (LTV of 0.03). Including it pulls the average to a meaningless number. The 3xIQR fence excludes it dynamically without hardcoding a threshold.</div>
       </div>
       <div class="reasoning-row">
-        <div class="reasoning-label">Consistency</div>
-        <div class="reasoning-content">The 3×IQR fence is the exact same method used in the Python pipeline's IQR Outlier Detection check. Both tools flag and exclude the same records.</div>
+        <div class="reasoning-label">Consistency with Pipeline</div>
+        <div class="reasoning-content">The 3xIQR method matches the Python pipeline exactly. Both tools flag and exclude the same records. The outlier-flag calculated column on the products table uses the same formula for visual flagging.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- AVG LTV % -->
+  <div class="section">
+    <div class="section-label">Measure 4</div>
+    <h2>Avg LTV %</h2>
+    <p>Avg LTV scaled to percentage for display on P4 (Metrics %). Formatting is a visual property, not a calculation change.</p>
+
+    <div class="code-wrapper">
+      <div class="code-header">
+        <span class="code-title">transactions table</span>
+        <span class="code-lang">DAX</span>
+      </div>
+      <pre><span class="kw">Avg LTV %</span> = <span class="ref">[Avg LTV]</span> * <span class="num">100</span></pre>
+    </div>
+
+    <div class="reasoning">
+      <div class="reasoning-row">
+        <div class="reasoning-label">Why x100 not format</div>
+        <div class="reasoning-content">P3 uses the decimal measure (0.83) with a fixed gradient at 0 / 0.8 / 1. P4 needs the percentage value (83) with the gradient at 0 / 80 / 100. Two separate visuals require two separate scales. One measure, one multiplication.</div>
       </div>
     </div>
   </div>
@@ -620,33 +645,31 @@
 
   <!-- PORTFOLIO VALUE -->
   <div class="section">
-    <div class="section-label">Measure 4</div>
+    <div class="section-label">Measure 5</div>
     <h2>Portfolio Value</h2>
-    <p>Calculates total portfolio value by combining P1-EUR and P2-USD prices at the most recent available date, with FX conversion applied to the EUR portfolio.</p>
+    <p>Total portfolio value combining P1-EUR and P2-USD at the most recent available price date, with FX conversion applied to the EUR portfolio.</p>
 
     <div class="code-wrapper">
       <div class="code-header">
         <span class="code-title">transactions table</span>
         <span class="code-lang">DAX</span>
       </div>
-      <pre><span class="cm">-- LASTNONBLANK adapts to any date range automatically</span>
-<span class="cm">-- No hard relationship needed between prices/fx and transactions</span>
-<span class="kw">Portfolio Value</span> =
-<span class="kw">VAR</span> MaxDate = <span class="fn">MAX</span>(<span class="tbl">transactions</span>[transaction-date])
-<span class="kw">VAR</span> FXRate =
-    <span class="fn">CALCULATE</span>(
-        <span class="fn">LASTNONBLANK</span>(<span class="tbl">fx</span>[EURUSD], <span class="num">1</span>),
-        <span class="tbl">fx</span>[price-date] <= MaxDate
-    )
+      <pre><span class="kw">Portfolio Value</span> =
+<span class="kw">VAR</span> SelectedDate = <span class="fn">MAX</span>(<span class="tbl">transactions</span>[transaction-date])
 <span class="kw">VAR</span> P1Value =
     <span class="fn">CALCULATE</span>(
         <span class="fn">LASTNONBLANK</span>(<span class="tbl">prices</span>[P1-EUR], <span class="num">1</span>),
-        <span class="tbl">prices</span>[price-date] <= MaxDate
+        <span class="tbl">prices</span>[price-date] &lt;= SelectedDate
     )
 <span class="kw">VAR</span> P2Value =
     <span class="fn">CALCULATE</span>(
         <span class="fn">LASTNONBLANK</span>(<span class="tbl">prices</span>[P2-USD], <span class="num">1</span>),
-        <span class="tbl">prices</span>[price-date] <= MaxDate
+        <span class="tbl">prices</span>[price-date] &lt;= SelectedDate
+    )
+<span class="kw">VAR</span> FXRate =
+    <span class="fn">CALCULATE</span>(
+        <span class="fn">LASTNONBLANK</span>(<span class="tbl">fx</span>[EURUSD], <span class="num">1</span>),
+        <span class="tbl">fx</span>[price-date] &lt;= SelectedDate
     )
 <span class="kw">RETURN</span>
     (P1Value * FXRate) + P2Value</pre>
@@ -655,22 +678,51 @@
     <div class="reasoning">
       <div class="reasoning-row">
         <div class="reasoning-label">Why LASTNONBLANK</div>
-        <div class="reasoning-content">fx and prices tables have different date coverage than transactions. A hard relationship would break when dates don't align between dataset swaps. LASTNONBLANK looks up the most recent available value as of each transaction date — adapts automatically.</div>
+        <div class="reasoning-content">fx and prices have different date coverage than transactions. A hard relationship breaks when date ranges don't align across dataset swaps. LASTNONBLANK retrieves the most recent available value as of SelectedDate with no model changes required.</div>
       </div>
       <div class="reasoning-row">
-        <div class="reasoning-label">Why No Hard Join</div>
-        <div class="reasoning-content">Date ranges don't align across dataset swaps. LASTNONBLANK resolves this at calculation time — no Power Query changes needed when new data arrives.</div>
-      </div>
-      <div class="reasoning-row">
-        <div class="reasoning-label">FX Nulls</div>
-        <div class="reasoning-content">5 null EURUSD values exist in the source file. Power Query Fill Down forward-fills them before the model loads. LASTNONBLANK provides a second layer of protection at the DAX level.</div>
+        <div class="reasoning-label">FX Conversion</div>
+        <div class="reasoning-content">P1 is priced in EUR. P2 is priced in USD. (P1Value x FXRate) converts EUR to USD. Adding P2Value gives total portfolio value in USD. The fx table has 5 null EURUSD rows: Power Query Fill Down handles these before the model loads.</div>
       </div>
     </div>
   </div>
 
   <div class="divider"></div>
 
-  <!-- ALL MEASURES TABLE -->
+  <!-- CALCULATED COLUMN -->
+  <div class="section">
+    <div class="section-label">Calculated Column</div>
+    <h2>outlier-flag (products table)</h2>
+    <p>Marks each product as FLAGGED or OK based on the 3xIQR fence. Used in the Overview page flagged products table and as a visual indicator on P3.</p>
+
+    <div class="code-wrapper">
+      <div class="code-header">
+        <span class="code-title">products table (calculated column)</span>
+        <span class="code-lang">DAX</span>
+      </div>
+      <pre><span class="kw">outlier-flag</span> =
+<span class="kw">VAR</span> Q1 = <span class="fn">PERCENTILE.INC</span>(<span class="tbl">products</span>[loan-property-value-ratio], <span class="num">0.25</span>)
+<span class="kw">VAR</span> Q3 = <span class="fn">PERCENTILE.INC</span>(<span class="tbl">products</span>[loan-property-value-ratio], <span class="num">0.75</span>)
+<span class="kw">VAR</span> IQR = Q3 - Q1
+<span class="kw">RETURN</span>
+<span class="fn">IF</span>(
+    <span class="tbl">products</span>[loan-property-value-ratio] &gt; Q3 + <span class="num">3</span> * IQR
+        || <span class="tbl">products</span>[loan-property-value-ratio] &lt; Q1 - <span class="num">3</span> * IQR,
+    <span class="str">"FLAGGED"</span>, <span class="str">"OK"</span>
+)</pre>
+    </div>
+
+    <div class="reasoning">
+      <div class="reasoning-row">
+        <div class="reasoning-label">Column vs Measure</div>
+        <div class="reasoning-content">A calculated column stores a row-level label (FLAGGED / OK) that can be used in table visuals and slicers. A measure cannot be used in a table row directly. The Avg LTV measure recomputes the fence inline for filtering: same logic, different purpose.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- SUMMARY TABLE -->
   <div class="section">
     <div class="section-label">Summary</div>
     <h2>All Five Measures</h2>
@@ -692,17 +744,17 @@
         <tr>
           <td><span class="measure-name">Loan Exposure %</span></td>
           <td>Exposure as % of portfolio value</td>
-          <td><span class="tag tag-blue">DIVIDE()</span> cascades BLANK from parent measure</td>
+          <td><span class="tag tag-blue">DIVIDE()</span> with IF wrapper for zero positions</td>
         </tr>
         <tr>
           <td><span class="measure-name">Avg LTV</span></td>
           <td>Average LTV, outliers excluded</td>
-          <td><span class="tag tag-amber">outlier-flag</span> dynamic 3×IQR exclusion</td>
+          <td><span class="tag tag-amber">3xIQR fence</span> computed inline via VAR</td>
         </tr>
         <tr>
           <td><span class="measure-name">Avg LTV %</span></td>
-          <td>Same as Avg LTV × 100</td>
-          <td>Simple multiplication — <span class="tag tag-green">[Avg LTV] * 100</span></td>
+          <td>Avg LTV scaled for % visuals on P4</td>
+          <td><span class="tag tag-green">[Avg LTV] x 100</span> separate scale for gradient</td>
         </tr>
         <tr>
           <td><span class="measure-name">Portfolio Value</span></td>
@@ -715,10 +767,15 @@
 
   <div class="divider"></div>
 
-  <!-- EVALUATION CRITERIA -->
+  <!-- APRIL 13 -->
   <div class="section">
-    <div class="section-label">Context</div>
-    <h2>How This Addresses the Evaluation Criteria</h2>
+    <div class="section-label">April 13 Guarantee</div>
+    <h2>New Dataset Compatibility</h2>
+
+    <div class="callout">
+      <div class="callout-title">Confirmed by Eric Della-Negra (1 April 2026)</div>
+      <p>"Same data structure. Only data may change." Every measure was built for this. No filters to adjust, no thresholds to recalibrate, no paths to update except the three Power Query parameters. Load new files, click Refresh, dashboard updates. Zero model changes required.</p>
+    </div>
 
     <div class="eval-grid">
       <div class="eval-item">
@@ -726,8 +783,8 @@
           <svg viewBox="0 0 10 10"><path d="M1.5 5l2.5 2.5 4.5-4.5"/></svg>
         </div>
         <div class="eval-text">
-          <strong>DAX Quality & Calculation Design</strong>
-          VAR pattern, DIVIDE(), LASTNONBLANK — deliberate choices with documented reasoning
+          <strong>LN filter in CALCULATE</strong>
+          Future product types do not affect the measure
         </div>
       </div>
       <div class="eval-item">
@@ -735,8 +792,8 @@
           <svg viewBox="0 0 10 10"><path d="M1.5 5l2.5 2.5 4.5-4.5"/></svg>
         </div>
         <div class="eval-text">
-          <strong>Data Model Architecture</strong>
-          No hard joins for fx/prices — DAX handles temporal alignment without relationship panel
+          <strong>3xIQR fence via VAR</strong>
+          Outlier threshold recalculates automatically on new data
         </div>
       </div>
       <div class="eval-item">
@@ -744,8 +801,8 @@
           <svg viewBox="0 0 10 10"><path d="M1.5 5l2.5 2.5 4.5-4.5"/></svg>
         </div>
         <div class="eval-text">
-          <strong>Data Quality Assessment</strong>
-          Outlier exclusion in DAX matches Python pipeline 3×IQR method exactly
+          <strong>LASTNONBLANK for fx/prices</strong>
+          Date range mismatches handled at DAX level
         </div>
       </div>
       <div class="eval-item">
@@ -753,15 +810,10 @@
           <svg viewBox="0 0 10 10"><path d="M1.5 5l2.5 2.5 4.5-4.5"/></svg>
         </div>
         <div class="eval-text">
-          <strong>Dashboard & UX Quality</strong>
-          Clean visuals without filters — ghost bars eliminated at source, not patched
+          <strong>VAR + BLANK()</strong>
+          Ghost bars eliminated at source on any dataset
         </div>
       </div>
-    </div>
-
-    <div class="callout">
-      <div class="callout-title">April 13 — New Dataset Guarantee</div>
-      <p>Every measure was designed to work on any dataset with the same structure. No filters to adjust, no thresholds to recalibrate, no paths to update except the three parameters. Load new files → click Refresh → dashboard updates. Zero model changes required.</p>
     </div>
   </div>
 
