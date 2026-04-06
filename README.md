@@ -1,4 +1,4 @@
-# Graian Capital Management — Data Operations Business Case
+#  Data Operations Business Case
 
 > **Role:** Data Operations Engineer/Analyst · Business Case Submission · April 2026  
 > **Author:** Adriele Rocha Weisz · Zurich, Switzerland  
