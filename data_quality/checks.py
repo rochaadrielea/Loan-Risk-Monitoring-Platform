@@ -194,10 +194,14 @@ class DataQualityChecker:
             ))
 
         # ── IQR OUTLIER check ─────────────────────────────────────────────────
+        # Quantity/volume columns in a trading book legitimately contain large
+        # paired buy/sell values — these are observations, not actionable issues.
+        # Ratio/value columns (loan-property-value-ratio) ARE actionable because
+        # outliers there distort averages used in LTV calculations.
+        _TRADING_FLOW_COLS = ("quantity", "qty", "volume", "units")
+        _is_trading_flow = any(h in col.lower() for h in _TRADING_FLOW_COLS)
+
         if cp.inferred_type == "numeric" and cp.outlier_count > 0:
-            severity = ("MEDIUM"
-                        if cp.outlier_count / max(profile.row_count, 1) > 0.05
-                        else "LOW")
             if col in df.columns and cp.outlier_fence_lo is not None:
                 nums = pd.to_numeric(df[col], errors="coerce")
                 mask = (nums < cp.outlier_fence_lo) | (nums > cp.outlier_fence_hi)
@@ -205,44 +209,97 @@ class DataQualityChecker:
             else:
                 snippet = []
 
-            self.issues.append(Issue(
-                severity=severity, category="OUTLIER",
-                table=table, column=col,
-                description=(
-                    f"{cp.outlier_count} statistical outlier(s) in [{col}] "
-                    f"(3×IQR fence: [{cp.outlier_fence_lo:,.4f} → {cp.outlier_fence_hi:,.4f}])"
-                ),
-                affected=cp.outlier_count,
-                suggestion=(
-                    f"Add flag column [is-outlier-{col}] in Power Query. "
-                    "Preserve raw data — exclude flagged rows from averages in DAX."
-                ),
-                explanation=(
-                    f"The middle 50% of values in [{col}] falls between "
-                    f"{cp.num_q1:,.2f} and {cp.num_q3:,.2f} "
-                    f"(this range is called the interquartile range, or IQR = {cp.num_iqr:,.2f}). "
-                    f"Anything more than 3× the IQR below the lower end "
-                    f"or above the upper end is considered statistically extreme. "
-                    f"That gives a normal range of {cp.outlier_fence_lo:,.2f} to {cp.outlier_fence_hi:,.2f}. "
-                    f"{cp.outlier_count} value(s) fall outside this range. "
-                    f"This does not mean the values are wrong — large sells are legitimate — "
-                    f"but they warrant review before being included in averages."
-                ),
-                snippet_rows=snippet,
-                stats={
-                    "Q1 (25th percentile)": f"{cp.num_q1:,.4f}",
-                    "Q3 (75th percentile)": f"{cp.num_q3:,.4f}",
-                    "IQR": f"{cp.num_iqr:,.4f}",
-                    "Lower fence (Q1 − 3×IQR)": f"{cp.outlier_fence_lo:,.4f}",
-                    "Upper fence (Q3 + 3×IQR)": f"{cp.outlier_fence_hi:,.4f}",
-                    "Outlier count": cp.outlier_count,
-                    "Min value": f"{cp.num_min:,.4f}",
-                    "Max value": f"{cp.num_max:,.4f}",
-                }
-            ))
+            if _is_trading_flow:
+                # Large transaction quantities are normal in a loan/trading book.
+                # Paired buys (+) and sells (-) of equal size on the same date
+                # are a routine settlement pattern — not data errors.
+                self.issues.append(Issue(
+                    severity="LOW", category="OUTLIER",
+                    table=table, column=col,
+                    is_observation=True,
+                    description=(
+                        f"{cp.outlier_count} statistical outlier(s) in [{col}] "
+                        f"(3×IQR fence: [{cp.outlier_fence_lo:,.4f} → {cp.outlier_fence_hi:,.4f}])"
+                    ),
+                    affected=cp.outlier_count,
+                    suggestion=(
+                        f"Review [{col}] outliers — check for paired buy/sell transactions "
+                        f"of equal size. If confirmed as legitimate trades, no action required. "
+                        f"Transaction quantities should not be excluded from Loan Exposure sums."
+                    ),
+                    explanation=(
+                        f"The middle 50% of values in [{col}] falls between "
+                        f"{cp.num_q1:,.2f} and {cp.num_q3:,.2f} "
+                        f"(IQR = {cp.num_iqr:,.2f}). "
+                        f"The statistical fence gives a normal range of "
+                        f"{cp.outlier_fence_lo:,.2f} to {cp.outlier_fence_hi:,.2f}. "
+                        f"{cp.outlier_count} value(s) fall outside this range. "
+                        f"In a loan portfolio, large transaction quantities are expected — "
+                        f"a buy of +3,900,000 paired with a sell of -3,900,000 on the same "
+                        f"date is a routine settlement, not a data error. "
+                        f"These values are flagged for visibility only. "
+                        f"Loan Exposure is a SUM — excluding large transactions would "
+                        f"silently underreport actual portfolio exposure."
+                    ),
+                    snippet_rows=snippet,
+                    stats={
+                        "Q1 (25th percentile)": f"{cp.num_q1:,.4f}",
+                        "Q3 (75th percentile)": f"{cp.num_q3:,.4f}",
+                        "IQR": f"{cp.num_iqr:,.4f}",
+                        "Lower fence (Q1 − 3×IQR)": f"{cp.outlier_fence_lo:,.4f}",
+                        "Upper fence (Q3 + 3×IQR)": f"{cp.outlier_fence_hi:,.4f}",
+                        "Outlier count": cp.outlier_count,
+                        "Min value": f"{cp.num_min:,.4f}",
+                        "Max value": f"{cp.num_max:,.4f}",
+                    }
+                ))
+            else:
+                # Ratio/value columns: outliers distort averages (e.g. LTV).
+                # These are actionable — flag and exclude from DAX averages.
+                severity = ("MEDIUM"
+                            if cp.outlier_count / max(profile.row_count, 1) > 0.05
+                            else "LOW")
+                self.issues.append(Issue(
+                    severity=severity, category="OUTLIER",
+                    table=table, column=col,
+                    description=(
+                        f"{cp.outlier_count} statistical outlier(s) in [{col}] "
+                        f"(3×IQR fence: [{cp.outlier_fence_lo:,.4f} → {cp.outlier_fence_hi:,.4f}])"
+                    ),
+                    affected=cp.outlier_count,
+                    suggestion=(
+                        f"Add flag column [is-outlier-{col}] in Power Query. "
+                        "Preserve raw data — exclude flagged rows from averages in DAX."
+                    ),
+                    explanation=(
+                        f"The middle 50% of values in [{col}] falls between "
+                        f"{cp.num_q1:,.2f} and {cp.num_q3:,.2f} "
+                        f"(this range is called the interquartile range, or IQR = {cp.num_iqr:,.2f}). "
+                        f"Anything more than 3× the IQR below the lower end "
+                        f"or above the upper end is considered statistically extreme. "
+                        f"That gives a normal range of {cp.outlier_fence_lo:,.2f} to {cp.outlier_fence_hi:,.2f}. "
+                        f"{cp.outlier_count} value(s) fall outside this range. "
+                        f"This does not mean the values are wrong — large sells are legitimate — "
+                        f"but they warrant review before being included in averages."
+                    ),
+                    snippet_rows=snippet,
+                    stats={
+                        "Q1 (25th percentile)": f"{cp.num_q1:,.4f}",
+                        "Q3 (75th percentile)": f"{cp.num_q3:,.4f}",
+                        "IQR": f"{cp.num_iqr:,.4f}",
+                        "Lower fence (Q1 − 3×IQR)": f"{cp.outlier_fence_lo:,.4f}",
+                        "Upper fence (Q3 + 3×IQR)": f"{cp.outlier_fence_hi:,.4f}",
+                        "Outlier count": cp.outlier_count,
+                        "Min value": f"{cp.num_min:,.4f}",
+                        "Max value": f"{cp.num_max:,.4f}",
+                    }
+                ))
 
         # ── NEGATIVE VALUES check ─────────────────────────────────────────────
-        if cp.inferred_type == "numeric" and cp.has_negatives:
+        # Skip trading flow columns — sells are legitimately negative in a
+        # loan/trading book. Only flag ratio/price/value columns where
+        # negatives are genuinely unexpected.
+        if cp.inferred_type == "numeric" and cp.has_negatives and not _is_trading_flow:
             positive_hints = ["price","value","ratio","rate","amount","volume","pct"]
             if any(h in col.lower() for h in positive_hints):
                 if col in df.columns:
@@ -350,7 +407,12 @@ class DataQualityChecker:
             ))
 
         # ── HIGH CARDINALITY ──────────────────────────────────────────────────
-        if cp.cardinality_flag == "HIGH" and cp.inferred_type == "categorical":
+        # Skip PK/ID columns — they are MEANT to be unique (e.g. transaction-code).
+        # Only flag categorical columns that look like they should have a limited
+        # value set (product-type, portfolio-code) but don't.
+        if (cp.cardinality_flag == "HIGH"
+                and cp.inferred_type == "categorical"
+                and not cp.is_likely_pk):
             self.issues.append(Issue(
                 severity="LOW", category="INTEGRITY",
                 table=table, column=col,

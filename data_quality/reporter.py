@@ -1675,7 +1675,7 @@ class PDFReporter:
         if dataset_name:
             story.append(Paragraph(f"Dataset: {dataset_name}",INFO))
         story.append(Paragraph(f"Generated: {self.run_time}",INFO))
-        if not is_reference:
+        if not is_obs:
             story.append(Paragraph(f"Findings in this section: {len(items)}",INFO))
         story+=[
             Spacer(1,0.25*cm),
@@ -1705,8 +1705,17 @@ class PDFReporter:
         else:
             sev_color={"HIGH":red_c,"MEDIUM":amb_c,"LOW":grn_c}
             sev_bg={"HIGH":colors.HexColor("#FEF2F2"),"MEDIUM":colors.HexColor("#FFFBEB"),"LOW":colors.HexColor("#F0FDF4")}
+            EXPL=ParagraphStyle("EXPL",fontSize=8,textColor=colors.HexColor("#2D3748"),leading=13,spaceAfter=0)
+            ACT_LABEL=ParagraphStyle("ACT_L",fontSize=8,textColor=navy,fontName="Helvetica-Bold",spaceAfter=0)
+            ACT_BODY=ParagraphStyle("ACT_B",fontSize=8,textColor=colors.HexColor("#2D3748"),leading=13,spaceAfter=0)
+            SNIP_HDR=ParagraphStyle("SH",fontSize=7.5,textColor=white,fontName="Helvetica-Bold")
+            SNIP_CEL=ParagraphStyle("SC",fontSize=7.5,textColor=colors.HexColor("#2D3748"),leading=11)
+            SNIP_FLAG=ParagraphStyle("SF",fontSize=7.5,textColor=red_c,fontName="Helvetica-Bold",leading=11)
+
             for issue in items:
                 c=sev_color.get(issue.severity,gry_c); bg=sev_bg.get(issue.severity,light)
+
+                # ── 1. Header row ─────────────────────────────────────────────
                 t1=Table([[
                     Paragraph(f"<b>{issue.severity}</b>",ParagraphStyle("S",fontSize=8,textColor=c,fontName="Helvetica-Bold")),
                     Paragraph(f"<b>{issue.category}</b> — {issue.table}"+(f".{issue.column}" if issue.column else ""),
@@ -1716,12 +1725,77 @@ class PDFReporter:
                     ("TOPPADDING",(0,0),(-1,-1),5),("BOTTOMPADDING",(0,0),(-1,-1),5),
                     ("LEFTPADDING",(0,0),(-1,-1),6),
                     ("GRID",(0,0),(-1,-1),0.25,colors.HexColor("#E2E8F0"))]))
-                t2=Table([[Paragraph(issue.explanation or issue.suggestion,SMALL)]],colWidths=[W])
+
+                # ── 2. Explanation paragraph ──────────────────────────────────
+                expl_text = issue.explanation or issue.description
+                t2=Table([[Paragraph(expl_text, EXPL)]],colWidths=[W])
                 t2.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),light),
-                    ("LEFTPADDING",(0,0),(-1,-1),8),("TOPPADDING",(0,0),(-1,-1),4),
-                    ("BOTTOMPADDING",(0,0),(-1,-1),6),
+                    ("LEFTPADDING",(0,0),(-1,-1),10),("RIGHTPADDING",(0,0),(-1,-1),10),
+                    ("TOPPADDING",(0,0),(-1,-1),7),("BOTTOMPADDING",(0,0),(-1,-1),7),
                     ("GRID",(0,0),(-1,-1),0.25,colors.HexColor("#E2E8F0"))]))
-                story+=[KeepTogether([t1,t2]),Spacer(1,0.2*cm)]
+
+                block=[KeepTogether([t1,t2])]
+
+                # ── 3. Sample rows table ──────────────────────────────────────
+                rows=getattr(issue,"snippet_rows",[])
+                if rows:
+                    highlight_col=rows[0].get("__highlight__","")
+                    # Build column list: skip internal keys, put highlighted col first
+                    all_cols=[k for k in rows[0].keys()
+                               if not k.startswith("__")]
+                    display_cols=([highlight_col]+[c for c in all_cols if c!=highlight_col]
+                                   if highlight_col in all_cols else all_cols)
+                    # Limit to 6 cols max to fit the page
+                    display_cols=display_cols[:6]
+                    col_w=W/len(display_cols)
+
+                    hdr_row=[Paragraph(col.upper(),SNIP_HDR) for col in display_cols]
+                    tbl_rows=[hdr_row]
+                    for r in rows:
+                        def _fmt(v):
+                            if v is None: return "—"
+                            if isinstance(v,float): return f"{v:,.6f}".rstrip("0").rstrip(".")
+                            return str(v)
+                        data_row=[]
+                        for col in display_cols:
+                            val=_fmt(r.get(col))
+                            style=SNIP_FLAG if col==highlight_col else SNIP_CEL
+                            data_row.append(Paragraph(val,style))
+                        tbl_rows.append(data_row)
+
+                    snip_tbl=Table(tbl_rows,colWidths=[col_w]*len(display_cols),repeatRows=1)
+                    ts=[("BACKGROUND",(0,0),(-1,0),colors.HexColor("#2D3748")),
+                        ("FONTNAME",(0,1),(-1,-1),"Helvetica"),
+                        ("FONTSIZE",(0,0),(-1,-1),7.5),
+                        ("ROWBACKGROUNDS",(0,1),(-1,-1),[white,colors.HexColor("#FFF8F8")]),
+                        ("GRID",(0,0),(-1,-1),0.25,colors.HexColor("#E2E8F0")),
+                        ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
+                        ("LEFTPADDING",(0,0),(-1,-1),5),("VALIGN",(0,0),(-1,-1),"MIDDLE")]
+                    snip_tbl.setStyle(TableStyle(ts))
+                    lbl=Table([[Paragraph(
+                        f"SAMPLE ROWS WHERE THIS ISSUE WAS FOUND (MAX {len(rows)} SHOWN)",
+                        ParagraphStyle("LBL",fontSize=7,textColor=gry_c,fontName="Helvetica-Bold")
+                    )]],colWidths=[W])
+                    lbl.setStyle(TableStyle([
+                        ("TOPPADDING",(0,0),(-1,-1),6),("BOTTOMPADDING",(0,0),(-1,-1),2),
+                        ("LEFTPADDING",(0,0),(-1,-1),0)]))
+                    block+=[lbl,snip_tbl]
+
+                # ── 4. Suggested action ───────────────────────────────────────
+                if issue.suggestion:
+                    act=Table([[
+                        Paragraph("Suggested action:", ACT_LABEL),
+                        Paragraph(issue.suggestion, ACT_BODY)
+                    ]],colWidths=[3.2*cm,W-3.2*cm])
+                    act.setStyle(TableStyle([
+                        ("BACKGROUND",(0,0),(-1,-1),colors.HexColor("#FFFDF5")),
+                        ("TOPPADDING",(0,0),(-1,-1),6),("BOTTOMPADDING",(0,0),(-1,-1),6),
+                        ("LEFTPADDING",(0,0),(-1,-1),8),
+                        ("GRID",(0,0),(-1,-1),0.25,colors.HexColor("#E8DDB8")),
+                        ("VALIGN",(0,0),(-1,-1),"TOP")]))
+                    block.append(act)
+
+                story+=block+[Spacer(1,0.35*cm)]
 
         story+=[Spacer(1,1*cm),HRFlowable(width=W,thickness=0.5,color=gold),Spacer(1,0.2*cm),
                 Paragraph(f"Graian Data Quality Pipeline v{meta.get('version','1.0.0')} "
