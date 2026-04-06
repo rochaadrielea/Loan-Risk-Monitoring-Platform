@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DAX Design Decisions — Graian Capital Management</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap');
+
+  :root {
+    --navy: #1C2B4A;
+    --gold: #B89650;
+    --gold-light: #D4B97A;
+    --light: #F5F6F8;
+    --white: #FFFFFF;
+    --red: #D64550;
+    --amber: #D9B300;
+    --green: #2E7D52;
+    --text: #2D3748;
+    --muted: #6B7280;
+    --code-bg: #0F1A2E;
+    --code-text: #E2E8F0;
+    --accent-green: #48BB78;
+    --accent-amber: #F6AD55;
+    --accent-blue: #63B3ED;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--light);
+    color: var(--text);
+    line-height: 1.7;
+  }
+
+  /* HEADER */
+  header {
+    background: var(--navy);
+    padding: 0;
+    position: relative;
+    overflow: hidden;
+  }
+
+  header::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: 
+      radial-gradient(ellipse at 80% 50%, rgba(184,150,80,0.08) 0%, transparent 60%),
+      radial-gradient(ellipse at 20% 50%, rgba(184,150,80,0.04) 0%, transparent 50%);
+  }
+
+  .header-inner {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 56px 40px 48px;
+    position: relative;
+  }
+
+  .header-tag {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--gold);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .header-tag::before {
+    content: '';
+    display: inline-block;
+    width: 24px;
+    height: 1px;
+    background: var(--gold);
+  }
+
+  h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 42px;
+    font-weight: 700;
+    color: var(--white);
+    line-height: 1.2;
+    margin-bottom: 12px;
+  }
+
+  .header-sub {
+    font-size: 15px;
+    color: rgba(255,255,255,0.55);
+    font-weight: 300;
+    letter-spacing: 0.3px;
+  }
+
+  .gold-rule {
+    height: 3px;
+    background: linear-gradient(90deg, var(--gold), transparent);
+    margin-bottom: 0;
+  }
+
+  /* MAIN */
+  main {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 48px 40px 80px;
+  }
+
+  /* SECTION */
+  .section {
+    margin-bottom: 56px;
+  }
+
+  .section-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--gold);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--navy);
+    margin-bottom: 20px;
+    line-height: 1.3;
+  }
+
+  h3 {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--gold);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    margin-top: 28px;
+  }
+
+  p {
+    font-size: 15px;
+    color: var(--text);
+    margin-bottom: 14px;
+    font-weight: 300;
+    line-height: 1.8;
+  }
+
+  /* PRINCIPLE CARDS */
+  .principles {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+    margin: 24px 0 32px;
+  }
+
+  .principle-card {
+    background: var(--white);
+    border: 1px solid rgba(28,43,74,0.08);
+    border-top: 3px solid var(--gold);
+    padding: 20px;
+    border-radius: 2px;
+  }
+
+  .principle-number {
+    font-family: 'Playfair Display', serif;
+    font-size: 32px;
+    color: rgba(184,150,80,0.2);
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+
+  .principle-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--navy);
+    margin-bottom: 6px;
+  }
+
+  .principle-desc {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  /* CODE BLOCK */
+  .code-wrapper {
+    background: var(--code-bg);
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 20px 0;
+    box-shadow: 0 8px 32px rgba(15,26,46,0.3);
+  }
+
+  .code-header {
+    background: rgba(255,255,255,0.04);
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .code-title {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: rgba(255,255,255,0.4);
+    letter-spacing: 1px;
+  }
+
+  .code-lang {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--gold);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  pre {
+    padding: 24px 24px;
+    overflow-x: auto;
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    line-height: 1.9;
+    color: var(--code-text);
+  }
+
+  .kw { color: #F6AD55; } /* keywords: VAR, RETURN, IF */
+  .fn { color: #63B3ED; } /* functions: CALCULATE, SUMX, DIVIDE */
+  .str { color: #68D391; } /* strings: "LN" */
+  .cm { color: #4A5568; font-style: italic; } /* comments */
+  .ref { color: #FBD38D; } /* measure references: [Loan Exposure] */
+  .tbl { color: #B794F4; } /* table references */
+  .num { color: #FC8181; } /* numbers */
+
+  /* REASONING FLOW */
+  .reasoning {
+    background: var(--white);
+    border: 1px solid rgba(28,43,74,0.08);
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 24px 0;
+  }
+
+  .reasoning-row {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    border-bottom: 1px solid rgba(28,43,74,0.06);
+  }
+
+  .reasoning-row:last-child {
+    border-bottom: none;
+  }
+
+  .reasoning-label {
+    background: rgba(28,43,74,0.03);
+    padding: 16px 20px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--navy);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    border-right: 1px solid rgba(28,43,74,0.06);
+  }
+
+  .reasoning-content {
+    padding: 16px 20px;
+    font-size: 14px;
+    color: var(--text);
+    font-weight: 300;
+    line-height: 1.7;
+    display: flex;
+    align-items: center;
+  }
+
+  .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 2px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    margin-right: 6px;
+  }
+
+  .tag-red { background: rgba(214,69,80,0.1); color: var(--red); }
+  .tag-amber { background: rgba(217,179,0,0.1); color: #9B7A00; }
+  .tag-green { background: rgba(46,125,82,0.1); color: var(--green); }
+  .tag-blue { background: rgba(37,99,235,0.1); color: #1D4ED8; }
+
+  /* MEASURE TABLE */
+  .measure-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0;
+    background: var(--white);
+    border: 1px solid rgba(28,43,74,0.08);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .measure-table th {
+    background: var(--navy);
+    color: var(--white);
+    padding: 12px 16px;
+    text-align: left;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-weight: 400;
+  }
+
+  .measure-table td {
+    padding: 14px 16px;
+    font-size: 13px;
+    border-bottom: 1px solid rgba(28,43,74,0.06);
+    vertical-align: top;
+    line-height: 1.6;
+  }
+
+  .measure-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  .measure-table tr:nth-child(even) td {
+    background: rgba(28,43,74,0.02);
+  }
+
+  .measure-name {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--navy);
+    font-weight: 500;
+  }
+
+  /* CALLOUT */
+  .callout {
+    background: linear-gradient(135deg, rgba(28,43,74,0.04) 0%, rgba(184,150,80,0.04) 100%);
+    border-left: 3px solid var(--gold);
+    padding: 20px 24px;
+    margin: 24px 0;
+    border-radius: 0 4px 4px 0;
+  }
+
+  .callout-title {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--gold);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    font-family: 'DM Mono', monospace;
+  }
+
+  .callout p {
+    margin: 0;
+    font-size: 14px;
+    color: var(--navy);
+    font-weight: 400;
+  }
+
+  /* DIVIDER */
+  .divider {
+    height: 1px;
+    background: linear-gradient(90deg, var(--gold), transparent);
+    margin: 48px 0;
+    opacity: 0.4;
+  }
+
+  /* FOOTER */
+  footer {
+    background: var(--navy);
+    padding: 24px 40px;
+    text-align: center;
+  }
+
+  .footer-inner {
+    max-width: 900px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .footer-text {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: rgba(255,255,255,0.3);
+    letter-spacing: 1px;
+  }
+
+  .footer-gold {
+    color: var(--gold);
+  }
+
+  /* EVAL CRITERIA */
+  .eval-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 20px 0;
+  }
+
+  .eval-item {
+    background: var(--white);
+    border: 1px solid rgba(28,43,74,0.08);
+    padding: 16px 18px;
+    border-radius: 2px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .eval-check {
+    width: 20px;
+    height: 20px;
+    background: var(--navy);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .eval-check svg {
+    width: 10px;
+    height: 10px;
+    fill: var(--gold);
+  }
+
+  .eval-text {
+    font-size: 13px;
+    color: var(--text);
+    font-weight: 400;
+    line-height: 1.5;
+  }
+
+  .eval-text strong {
+    display: block;
+    color: var(--navy);
+    font-weight: 500;
+    margin-bottom: 2px;
+  }
+
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="header-tag">Graian Capital Management · Data Operations Business Case</div>
+    <h1>DAX Design Decisions</h1>
+    <p class="header-sub">Power BI Measure Architecture · April 2026 · Adriele Rocha Weisz</p>
+  </div>
+  <div class="gold-rule"></div>
+</header>
+
+<main>
+
+  <!-- PRINCIPLES -->
+  <div class="section">
+    <div class="section-label">Foundation</div>
+    <h2>Three Design Principles Applied to Every Measure</h2>
+    <p>Every DAX measure in this model was built around three principles that ensure reliability across any dataset — not just the one used in development.</p>
+
+    <div class="principles">
+      <div class="principle-card">
+        <div class="principle-number">01</div>
+        <div class="principle-title">LN Filter in DAX</div>
+        <p class="principle-desc">Applied inside CALCULATE — not in Power Query — so it holds regardless of what new product types appear in future datasets.</p>
+      </div>
+      <div class="principle-card">
+        <div class="principle-number">02</div>
+        <div class="principle-title">DIVIDE() not /</div>
+        <p class="principle-desc">Zero-safe division that never breaks charts when the denominator is zero. Returns BLANK instead of error.</p>
+      </div>
+      <div class="principle-card">
+        <div class="principle-number">03</div>
+        <div class="principle-title">LASTNONBLANK for FX</div>
+        <p class="principle-desc">Adapts to any date range automatically. No hardcoded rates. Works when fx and prices tables have different date coverage.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- LOAN EXPOSURE -->
+  <div class="section">
+    <div class="section-label">Measure 1</div>
+    <h2>Loan Exposure</h2>
+    <p>Calculates the total net loan value from LN-type transactions only. Uses the VAR pattern to eliminate floating point artifacts that appear when buys and sells cancel out exactly.</p>
+
+    <div class="code-wrapper">
+      <div class="code-header">
+        <span class="code-title">transactions table · Home measure</span>
+        <span class="code-lang">DAX</span>
+      </div>
+      <pre><span class="cm">-- VAR pattern: calculate first, apply business logic after</span>
+<span class="kw">Loan Exposure</span> =
+<span class="kw">VAR</span> Result =
+    <span class="fn">ROUND</span>(
+        <span class="fn">CALCULATE</span>(
+            <span class="fn">SUMX</span>(
+                <span class="tbl">transactions</span>,
+                <span class="tbl">transactions</span>[transaction-quantity] *
+                <span class="tbl">transactions</span>[transaction-price]
+            ),
+            <span class="tbl">products</span>[product-type] = <span class="str">"LN"</span>
+        ),
+        <span class="num">2</span>
+    )
+<span class="kw">RETURN</span>
+    <span class="cm">-- If net position = 0, return BLANK so Power BI hides automatically</span>
+    <span class="fn">IF</span>(Result = <span class="num">0</span>, <span class="fn">BLANK</span>(), Result)</pre>
+    </div>
+
+    <h3>Why This Pattern</h3>
+    <div class="reasoning">
+      <div class="reasoning-row">
+        <div class="reasoning-label">The Problem</div>
+        <div class="reasoning-content">Floating point arithmetic in DAX produces values like 5.8E-11 when buys and sells cancel out perfectly. This is not zero — it is a binary rounding artifact. Power BI renders it as a bar or label.</div>
+      </div>
+      <div class="reasoning-row">
+        <div class="reasoning-label">Why Not ROUND</div>
+        <div class="reasoning-content">ROUND fixes the display but not the logic. A rounded 0.00 is still not BLANK — Power BI still renders the bar.</div>
+      </div>
+      <div class="reasoning-row">
+        <div class="reasoning-label">Why Not a Filter</div>
+        <div class="reasoning-content">Any hardcoded threshold like <span class="tag tag-red">&gt; 0.001</span> risks hiding real future data. A new dataset might have legitimate small positions below any chosen threshold.</div>
+      </div>
+      <div class="reasoning-row">
+        <div class="reasoning-label">The Solution</div>
+        <div class="reasoning-content">VAR + <span class="tag tag-green">BLANK()</span> — if the net position is exactly zero after rounding, it has no current exposure and should not appear. BLANK() is Power BI's native signal to hide. No filters needed anywhere.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- LOAN EXPOSURE % -->
+  <div class="section">
+    <div class="section-label">Measure 2</div>
+    <h2>Loan Exposure %</h2>
+    <p>Expresses loan exposure as a percentage of total portfolio value. Inherits the BLANK behaviour from Loan Exposure automatically — no additional logic required.</p>
+
+    <div class="code-wrapper">
+      <div class="code-header">
+        <span class="code-title">transactions table</span>
+        <span class="code-lang">DAX</span>
+      </div>
+      <pre><span class="cm">-- DIVIDE returns BLANK when [Loan Exposure] is BLANK</span>
+<span class="cm">-- No additional IF() needed — cascades automatically</span>
+<span class="kw">Loan Exposure %</span> =
+<span class="fn">DIVIDE</span>(
+    <span class="ref">[Loan Exposure]</span>,
+    <span class="ref">[Portfolio Value]</span>
+)</pre>
+    </div>
+
+    <div class="callout">
+      <div class="callout-title">Cascade Effect</div>
+      <p>Because DIVIDE([Loan Exposure], anything) returns BLANK when the numerator is BLANK, fixing Loan Exposure once cascades automatically to Loan Exposure %. One fix at source, correct behaviour everywhere.</p>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- AVG LTV -->
+  <div class="section">
+    <div class="section-label">Measure 3</div>
+    <h2>Avg LTV</h2>
+    <p>Calculates average loan-to-value ratio excluding statistical outliers. Uses the same 3×IQR method as the Python pipeline — methodology is consistent across both tools.</p>
+
+    <div class="code-wrapper">
+      <div class="code-header">
+        <span class="code-title">transactions table</span>
+        <span class="code-lang">DAX</span>
+      </div>
+      <pre><span class="cm">-- Dynamic outlier exclusion via 3×IQR fence</span>
+<span class="cm">-- Matches exact same method used in Python pipeline</span>
+<span class="kw">Avg LTV</span> =
+<span class="fn">AVERAGEX</span>(
+    <span class="fn">FILTER</span>(
+        <span class="tbl">products</span>,
+        <span class="tbl">products</span>[product-type] = <span class="str">"LN"</span> &&
+        <span class="tbl">products</span>[outlier-flag] = <span class="str">"OK"</span>
+    ),
+    <span class="fn">DIVIDE</span>(<span class="num">1</span>, <span class="tbl">products</span>[loan-property-value-ratio])
+)</pre>
+    </div>
+
+    <div class="reasoning">
+      <div class="reasoning-row">
+        <div class="reasoning-label">LTV Formula</div>
+        <div class="reasoning-content">The brief provides <code>loan-property-value-ratio</code> which is the inverse of LTV. LTV = 1 / loan-property-value-ratio. DIVIDE() used for zero safety.</div>
+      </div>
+      <div class="reasoning-row">
+        <div class="reasoning-label">Outlier Exclusion</div>
+        <div class="reasoning-content">PR-P4N4N has a ratio of 33.33 — LTV of 0.03. Including it would pull the average to a meaningless number. The outlier-flag calculated column excludes values outside Q1−3×IQR and Q3+3×IQR dynamically.</div>
+      </div>
+      <div class="reasoning-row">
+        <div class="reasoning-label">Consistency</div>
+        <div class="reasoning-content">The 3×IQR fence is the exact same method used in the Python pipeline's IQR Outlier Detection check. Both tools flag and exclude the same records.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- PORTFOLIO VALUE -->
+  <div class="section">
+    <div class="section-label">Measure 4</div>
+    <h2>Portfolio Value</h2>
+    <p>Calculates total portfolio value by combining P1-EUR and P2-USD prices at the most recent available date, with FX conversion applied to the EUR portfolio.</p>
+
+    <div class="code-wrapper">
+      <div class="code-header">
+        <span class="code-title">transactions table</span>
+        <span class="code-lang">DAX</span>
+      </div>
+      <pre><span class="cm">-- LASTNONBLANK adapts to any date range automatically</span>
+<span class="cm">-- No hard relationship needed between prices/fx and transactions</span>
+<span class="kw">Portfolio Value</span> =
+<span class="kw">VAR</span> MaxDate = <span class="fn">MAX</span>(<span class="tbl">transactions</span>[transaction-date])
+<span class="kw">VAR</span> FXRate =
+    <span class="fn">CALCULATE</span>(
+        <span class="fn">LASTNONBLANK</span>(<span class="tbl">fx</span>[EURUSD], <span class="num">1</span>),
+        <span class="tbl">fx</span>[price-date] <= MaxDate
+    )
+<span class="kw">VAR</span> P1Value =
+    <span class="fn">CALCULATE</span>(
+        <span class="fn">LASTNONBLANK</span>(<span class="tbl">prices</span>[P1-EUR], <span class="num">1</span>),
+        <span class="tbl">prices</span>[price-date] <= MaxDate
+    )
+<span class="kw">VAR</span> P2Value =
+    <span class="fn">CALCULATE</span>(
+        <span class="fn">LASTNONBLANK</span>(<span class="tbl">prices</span>[P2-USD], <span class="num">1</span>),
+        <span class="tbl">prices</span>[price-date] <= MaxDate
+    )
+<span class="kw">RETURN</span>
+    (P1Value * FXRate) + P2Value</pre>
+    </div>
+
+    <div class="reasoning">
+      <div class="reasoning-row">
+        <div class="reasoning-label">Why LASTNONBLANK</div>
+        <div class="reasoning-content">fx and prices tables have different date coverage than transactions. A hard relationship would break when dates don't align between dataset swaps. LASTNONBLANK looks up the most recent available value as of each transaction date — adapts automatically.</div>
+      </div>
+      <div class="reasoning-row">
+        <div class="reasoning-label">Why No Hard Join</div>
+        <div class="reasoning-content">Date ranges don't align across dataset swaps. LASTNONBLANK resolves this at calculation time — no Power Query changes needed when new data arrives.</div>
+      </div>
+      <div class="reasoning-row">
+        <div class="reasoning-label">FX Nulls</div>
+        <div class="reasoning-content">5 null EURUSD values exist in the source file. Power Query Fill Down forward-fills them before the model loads. LASTNONBLANK provides a second layer of protection at the DAX level.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ALL MEASURES TABLE -->
+  <div class="section">
+    <div class="section-label">Summary</div>
+    <h2>All Five Measures</h2>
+
+    <table class="measure-table">
+      <thead>
+        <tr>
+          <th>Measure</th>
+          <th>Purpose</th>
+          <th>Key Pattern</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="measure-name">Loan Exposure</span></td>
+          <td>Net loan value, LN products only</td>
+          <td><span class="tag tag-blue">VAR + BLANK()</span> eliminates floating point artifacts</td>
+        </tr>
+        <tr>
+          <td><span class="measure-name">Loan Exposure %</span></td>
+          <td>Exposure as % of portfolio value</td>
+          <td><span class="tag tag-blue">DIVIDE()</span> cascades BLANK from parent measure</td>
+        </tr>
+        <tr>
+          <td><span class="measure-name">Avg LTV</span></td>
+          <td>Average LTV, outliers excluded</td>
+          <td><span class="tag tag-amber">outlier-flag</span> dynamic 3×IQR exclusion</td>
+        </tr>
+        <tr>
+          <td><span class="measure-name">Avg LTV %</span></td>
+          <td>Same as Avg LTV × 100</td>
+          <td>Simple multiplication — <span class="tag tag-green">[Avg LTV] * 100</span></td>
+        </tr>
+        <tr>
+          <td><span class="measure-name">Portfolio Value</span></td>
+          <td>Total value, both portfolios, FX applied</td>
+          <td><span class="tag tag-blue">LASTNONBLANK</span> adapts to any date range</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- EVALUATION CRITERIA -->
+  <div class="section">
+    <div class="section-label">Context</div>
+    <h2>How This Addresses the Evaluation Criteria</h2>
+
+    <div class="eval-grid">
+      <div class="eval-item">
+        <div class="eval-check">
+          <svg viewBox="0 0 10 10"><path d="M1.5 5l2.5 2.5 4.5-4.5"/></svg>
+        </div>
+        <div class="eval-text">
+          <strong>DAX Quality & Calculation Design</strong>
+          VAR pattern, DIVIDE(), LASTNONBLANK — deliberate choices with documented reasoning
+        </div>
+      </div>
+      <div class="eval-item">
+        <div class="eval-check">
+          <svg viewBox="0 0 10 10"><path d="M1.5 5l2.5 2.5 4.5-4.5"/></svg>
+        </div>
+        <div class="eval-text">
+          <strong>Data Model Architecture</strong>
+          No hard joins for fx/prices — DAX handles temporal alignment without relationship panel
+        </div>
+      </div>
+      <div class="eval-item">
+        <div class="eval-check">
+          <svg viewBox="0 0 10 10"><path d="M1.5 5l2.5 2.5 4.5-4.5"/></svg>
+        </div>
+        <div class="eval-text">
+          <strong>Data Quality Assessment</strong>
+          Outlier exclusion in DAX matches Python pipeline 3×IQR method exactly
+        </div>
+      </div>
+      <div class="eval-item">
+        <div class="eval-check">
+          <svg viewBox="0 0 10 10"><path d="M1.5 5l2.5 2.5 4.5-4.5"/></svg>
+        </div>
+        <div class="eval-text">
+          <strong>Dashboard & UX Quality</strong>
+          Clean visuals without filters — ghost bars eliminated at source, not patched
+        </div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <div class="callout-title">April 13 — New Dataset Guarantee</div>
+      <p>Every measure was designed to work on any dataset with the same structure. No filters to adjust, no thresholds to recalibrate, no paths to update except the three parameters. Load new files → click Refresh → dashboard updates. Zero model changes required.</p>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  <div class="footer-inner">
+    <span class="footer-text">Graian Capital Management SA · Data Operations Business Case · April 2026</span>
+    <span class="footer-text footer-gold">Adriele Rocha Weisz</span>
+  </div>
+</footer>
+
+</body>
+</html>

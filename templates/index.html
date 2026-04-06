@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Graian — Data Quality Pipeline</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Source+Sans+3:ital,wght@0,300;0,400;0,600;0,700;1,400&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--navy:#1C2B4A;--navy2:#162240;--gold:#B89650;--gl:#D4AF70;--white:#fff;
+  --light:#F4F5F7;--grey:#6B7280;--border:#E5E7EB;--red:#DC2626;--text:#1F2937}
+html,body{height:100%;font-family:'Source Sans 3',system-ui,sans-serif;background:var(--light);color:var(--text)}
+.page{min-height:100vh;display:grid;grid-template-rows:auto 1fr auto}
+header{background:var(--navy)}
+.gold-bar{height:4px;background:linear-gradient(90deg,var(--gold),var(--gl),var(--gold))}
+.hinner{display:flex;align-items:center;justify-content:space-between;padding:20px 48px}
+.brand{display:flex;align-items:center;gap:14px}
+.bmark{width:40px;height:40px;border:2px solid var(--gold);border-radius:6px;
+  display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:900;color:var(--gold)}
+.bname{font-family:'Playfair Display',serif;color:var(--white);font-size:17px}
+.bsub{color:rgba(255,255,255,.38);font-size:11px;margin-top:1px;letter-spacing:.5px;font-weight:300}
+.hbadge{background:rgba(184,150,80,.15);border:1px solid rgba(184,150,80,.3);color:var(--gold);
+  font-size:11px;font-weight:600;padding:5px 12px;border-radius:20px;letter-spacing:.5px}
+main{display:flex;align-items:center;justify-content:center;padding:60px 24px}
+.container{width:100%;max-width:620px}
+.headline{text-align:center;margin-bottom:44px}
+.headline h1{font-family:'Playfair Display',serif;font-size:36px;color:var(--navy);line-height:1.2;margin-bottom:12px}
+.headline h1 em{color:var(--gold);font-style:normal}
+.headline p{color:var(--grey);font-size:15px;line-height:1.6;font-weight:300;max-width:460px;margin:0 auto}
+.error-banner{background:#FEF2F2;border:1px solid #FCA5A5;border-radius:8px;
+  padding:14px 18px;color:var(--red);font-size:14px;margin-bottom:24px}
+.upload-card{background:var(--white);border-radius:16px;box-shadow:0 4px 24px rgba(28,43,74,.08);overflow:hidden}
+.drop-zone{border:2px dashed var(--border);border-radius:12px;margin:28px;padding:52px 32px;
+  text-align:center;cursor:pointer;transition:all .2s;position:relative}
+.drop-zone:hover,.drop-zone.drag-over{border-color:var(--gold);background:rgba(184,150,80,.04)}
+.drop-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.up-icon{width:56px;height:56px;background:rgba(28,43,74,.06);border-radius:14px;
+  display:flex;align-items:center;justify-content:center;margin:0 auto 18px;font-size:26px}
+.drop-title{font-size:17px;font-weight:600;color:var(--navy);margin-bottom:6px}
+.drop-sub{font-size:13px;color:var(--grey)}.drop-sub span{color:var(--gold);font-weight:600}
+.file-list{margin:0 28px 16px;display:flex;flex-direction:column;gap:8px}
+.file-item{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--light);
+  border-radius:8px;font-size:13px;animation:fi .2s ease}
+@keyframes fi{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.fname{flex:1;color:var(--navy);font-weight:600}.fsize{color:var(--grey);font-size:12px}
+.frem{width:22px;height:22px;border-radius:50%;border:none;background:transparent;
+  cursor:pointer;color:var(--grey);font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.frem:hover{background:#FEE2E2;color:var(--red)}
+.submit-row{padding:0 28px 28px;display:flex;gap:12px;align-items:center}
+.btn{flex:1;background:var(--navy);color:var(--white);border:none;padding:14px 24px;
+  border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;transition:all .2s;
+  font-family:'Source Sans 3',sans-serif;letter-spacing:.3px}
+.btn:hover{background:var(--navy2);transform:translateY(-1px);box-shadow:0 4px 16px rgba(28,43,74,.25)}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
+.btn-hint{font-size:12px;color:var(--grey)}
+.fmts{display:flex;justify-content:center;gap:8px;margin-top:24px}
+.fmt{background:var(--white);border:1px solid var(--border);border-radius:6px;
+  padding:4px 12px;font-size:11px;font-weight:700;color:var(--grey);text-transform:uppercase;letter-spacing:.5px}
+footer{background:var(--navy);padding:16px 48px;display:flex;align-items:center;justify-content:space-between}
+footer p{color:rgba(255,255,255,.3);font-size:11px}
+footer strong{color:var(--gold)}
+.loading{display:none;position:fixed;inset:0;background:rgba(28,43,74,.88);
+  z-index:999;flex-direction:column;align-items:center;justify-content:center;gap:16px}
+.loading.show{display:flex}
+.spinner{width:48px;height:48px;border:3px solid rgba(184,150,80,.3);
+  border-top-color:var(--gold);border-radius:50%;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.lt{color:var(--white);font-size:15px;font-weight:300}.ls{color:var(--gold);font-size:13px}
+</style>
+</head>
+<body>
+<div class="page">
+<header>
+  <div class="gold-bar"></div>
+  <div class="hinner">
+    <div class="brand">
+      <div class="bmark">G</div>
+      <div><div class="bname">Graian Capital Management</div><div class="bsub">Data Quality Pipeline</div></div>
+    </div>
+    <div class="hbadge">v1.0.0</div>
+  </div>
+</header>
+<main>
+<div class="container">
+  <div class="headline">
+    <h1>Drop your data.<br><em>Get answers.</em></h1>
+    <p>Upload source files — the pipeline discovers the schema, finds quality issues, detects schema drift, and generates a full stakeholder report automatically.</p>
+  </div>
+  {% if error %}<div class="error-banner">⚠️ {{ error }}</div>{% endif %}
+  <form action="/analyze" method="POST" enctype="multipart/form-data" id="form">
+    <div class="upload-card">
+      <div class="drop-zone" id="dz">
+        <input type="file" name="files" id="fi" multiple accept=".xlsx,.xls,.csv">
+        <div class="up-icon">📂</div>
+        <div class="drop-title">Drop files here or click to browse</div>
+        <div class="drop-sub">Supports <span>.xlsx</span> and <span>.csv</span> files</div>
+      </div>
+      <div class="file-list" id="fl"></div>
+      <div class="submit-row">
+        <button type="submit" class="btn" id="sb" disabled>Run Quality Analysis</button>
+        <div class="btn-hint">~5 seconds</div>
+      </div>
+    </div>
+  </form>
+  <div class="fmts">
+    <div class="fmt">Excel .xlsx</div><div class="fmt">Excel .xls</div>
+    <div class="fmt">CSV comma</div><div class="fmt">CSV semicolon</div>
+  </div>
+</div>
+</main>
+<footer>
+  <p>Graian Capital Management SA — <strong>Data Quality Pipeline</strong></p>
+  <p>Confidential</p>
+</footer>
+</div>
+<div class="loading" id="loading">
+  <div class="spinner"></div>
+  <div class="lt">Running quality analysis…</div>
+  <div class="ls">Profiling schema · Checking integrity · Generating reports</div>
+</div>
+<script>
+const fi=document.getElementById('fi'),dz=document.getElementById('dz'),
+  fl=document.getElementById('fl'),sb=document.getElementById('sb'),
+  form=document.getElementById('form'),loading=document.getElementById('loading');
+let dt=new DataTransfer();
+const fmtSz=b=>b<1024?b+'B':b<1048576?(b/1024).toFixed(1)+'KB':(b/1048576).toFixed(1)+'MB';
+const fIcon=n=>n.endsWith('.csv')?'📄':'📊';
+function render(){
+  fl.innerHTML='';
+  for(let i=0;i<dt.files.length;i++){
+    const f=dt.files[i],el=document.createElement('div');
+    el.className='file-item';
+    el.innerHTML=`<span>${fIcon(f.name)}</span><span class="fname">${f.name}</span>
+      <span class="fsize">${fmtSz(f.size)}</span>
+      <button type="button" class="frem" data-i="${i}">✕</button>`;
+    fl.appendChild(el);
+  }
+  sb.disabled=dt.files.length===0;
+}
+function add(files){
+  for(const f of files){const e=f.name.split('.').pop().toLowerCase();
+    if(['xlsx','xls','csv'].includes(e))dt.items.add(f);}
+  fi.files=dt.files;render();
+}
+fi.addEventListener('change',()=>add(fi.files));
+fl.addEventListener('click',e=>{
+  const b=e.target.closest('.frem');if(!b)return;
+  const idx=parseInt(b.dataset.i),nd=new DataTransfer();
+  for(let i=0;i<dt.files.length;i++)if(i!==idx)nd.items.add(dt.files[i]);
+  dt=nd;fi.files=dt.files;render();
+});
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag-over')});
+dz.addEventListener('dragleave',()=>dz.classList.remove('drag-over'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag-over');add(e.dataTransfer.files)});
+form.addEventListener('submit',()=>{loading.classList.add('show');sb.disabled=true});
+</script>
+</body></html>

@@ -1,0 +1,39 @@
+{
+  "project": {
+    "name": "Graian Capital Management",
+    "description": "Data Quality Pipeline — Loan Exposure & LTV Reporting",
+    "author": "Adriele Rocha Weisz",
+    "version": "2.0.0"
+  },
+
+  "sources": {
+    "transactions": { "file": "data/business case.xlsx", "type": "excel", "sheet": "transactions" },
+    "products":     { "file": "data/business case.xlsx", "type": "excel", "sheet": "products" },
+    "portfolios":   { "file": "data/business case.xlsx", "type": "excel", "sheet": "portfolios" },
+    "fx":           { "file": "data/fx.csv",             "type": "csv",   "delimiter": "," },
+    "prices":       { "file": "data/prices.csv",         "type": "csv",   "delimiter": ";" }
+  },
+
+  "relationships": [],
+
+  "business_rules": [
+    {
+      "id": "BR-001",
+      "description": "Only products of type LN (Loan) are included in loan exposure calculations",
+      "applies_to": "products",
+      "validator": "allowed_values",
+      "column": "product-type",
+      "values": ["LN", "EQ", "FI", "FX", "CASH"],
+      "note": "Unexpected product types should be investigated before inclusion in exposure calc"
+    }
+  ],
+
+  "calculation_hints": {
+    "loan_filter_column": "product-type",
+    "loan_filter_value":  "LN",
+    "ltv_column":         "loan-property-value-ratio",
+    "ltv_formula":        "1 / loan-property-value-ratio",
+    "fx_pair":            "EURUSD",
+    "eur_portfolio":      "P1-EUR"
+  }
+}
