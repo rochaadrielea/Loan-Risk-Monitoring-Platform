@@ -3,3 +3,9 @@ output/
 *.pbix
 __pycache__/
 *.pyc
+
+~$*.pptx
+~$*.xlsx
+~$*.docx
+output/
+*.tmp
