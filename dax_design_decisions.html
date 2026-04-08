@@ -411,6 +411,92 @@
     margin: 20px 0;
   }
 
+  /* ── MOBILE ────────────────────────────────────────────────────────────── */
+  @media (max-width: 640px) {
+
+    /* Header */
+    .header-inner {
+      padding: 36px 20px 32px;
+    }
+
+    h1 {
+      font-size: 26px;
+    }
+
+    .header-sub {
+      font-size: 13px;
+    }
+
+    /* Main content */
+    main {
+      padding: 32px 20px 60px;
+    }
+
+    h2 {
+      font-size: 22px;
+    }
+
+    /* Principle cards: 3-col → 1-col */
+    .principles {
+      grid-template-columns: 1fr;
+    }
+
+    /* Reasoning rows: side-by-side → stacked */
+    .reasoning-row {
+      grid-template-columns: 1fr;
+    }
+
+    .reasoning-label {
+      border-right: none;
+      border-bottom: 1px solid rgba(28,43,74,0.06);
+      padding: 12px 16px;
+    }
+
+    .reasoning-content {
+      padding: 12px 16px;
+    }
+
+    /* Eval grid: 2-col → 1-col */
+    .eval-grid {
+      grid-template-columns: 1fr;
+    }
+
+    /* Code blocks: allow horizontal scroll, don't overflow */
+    .code-wrapper {
+      margin: 16px -4px;
+    }
+
+    pre {
+      font-size: 11px;
+      padding: 16px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    /* Measure table: wrap in scroll container */
+    .measure-table {
+      display: block;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    /* Footer: stack instead of space-between */
+    .footer-inner {
+      flex-direction: column;
+      gap: 6px;
+      text-align: center;
+    }
+
+    footer {
+      padding: 20px 20px;
+    }
+
+    /* Callout */
+    .callout {
+      padding: 16px 18px;
+    }
+  }
+
   .eval-item {
     background: var(--white);
     border: 1px solid rgba(28,43,74,0.08);
