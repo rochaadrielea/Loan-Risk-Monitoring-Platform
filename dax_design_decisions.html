@@ -3,9 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
 <title>DAX Design Decisions — Graian Capital Management</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap');
@@ -517,12 +514,16 @@
     }
 
     pre {
-      font-size: 11px;
-      padding: 14px 16px;
+      font-size: 10px;
+      line-height: 1.7;
+      padding: 12px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      overflow-wrap: break-word;
     }
 
     .code-wrapper {
-      overflow-x: auto;
+      overflow-x: visible;
     }
 
     .measure-table {
@@ -869,7 +870,7 @@
 <footer>
   <div class="footer-inner">
     <span class="footer-text">Graian Capital Management SA · Data Operations Business Case · April 2026</span>
-    <span class="footer-text footer-gold">Adriele Rocha </span>
+    <span class="footer-text footer-gold">Adriele Rocha Weisz </span>
   </div>
 </footer>
 
