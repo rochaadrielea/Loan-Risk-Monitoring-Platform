@@ -722,7 +722,7 @@
 
     <div class="callout" style="border-left-color: var(--red); background: rgba(214,69,80,0.04);">
       <div class="callout-title" style="color: var(--red);">Bug found during testing — original version incorrect</div>
-      <p>The original measure used LASTNONBLANK which iterates column values in ascending numeric order — not by date. Because May 2022 P1-EUR (10.96M) is numerically larger than June 2022 (6.63M), LASTNONBLANK returned May as the last non-blank row even though June is the more recent date. The same issue affected the FX rate, which resolved to a 2021 value. Result: Portfolio Value showed 22.45M instead of the correct 14.11M. Discovered by replicating the DAX logic in Python and reverse engineering the output.</p>
+      <p>LASTNONBLANK scans the column in ascending numeric order (smallest to largest) and returns the last non-blank row it sees. It does not use dates as reference. In the prices table: May 2022 P1-EUR (10.96M) is numerically larger than June 2022 (6.63M), so LASTNONBLANK returned May instead of June. The same problem occurred in the FX table: the highest EURUSD rate is 1.218 from June 2021, so that rate was returned instead of the correct June 2022 rate (1.0484). Result: Portfolio Value showed 22.45M instead of 14.11M. The issue was found by replicating the exact DAX logic in Python, which returned 14.11M, and then reverse engineering which prices and FX combination produced the 22.45M that Power BI was showing.</p>
     </div>
 
     <h3>Original version (incorrect)</h3>
