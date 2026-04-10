@@ -514,16 +514,12 @@
     }
 
     pre {
-      font-size: 10px;
-      line-height: 1.7;
-      padding: 12px;
-      white-space: pre-wrap;
-      word-break: break-all;
-      overflow-wrap: break-word;
+      font-size: 11px;
+      padding: 14px 16px;
     }
 
     .code-wrapper {
-      overflow-x: visible;
+      overflow-x: auto;
     }
 
     .measure-table {
@@ -587,8 +583,8 @@
       </div>
       <div class="principle-card">
         <div class="principle-number">03</div>
-        <div class="principle-title">LASTNONBLANK for FX</div>
-        <p class="principle-desc">Adapts to any date range automatically. No hardcoded rates. Works when fx and prices tables have different date coverage.</p>
+        <div class="principle-title">MAXX FILTER for date lookup</div>
+        <p class="principle-desc">Explicitly finds the most recent date on or before the reference date, then looks up the value. Safe when tables have no hard relationship.</p>
       </div>
     </div>
   </div>
@@ -724,46 +720,83 @@
     <h2>Portfolio Value</h2>
     <p>Calculates total portfolio value by combining P1-EUR and P2-USD prices at the most recent available date, with FX conversion applied to the EUR portfolio.</p>
 
+    <div class="callout" style="border-left-color: var(--red); background: rgba(214,69,80,0.04);">
+      <div class="callout-title" style="color: var(--red);">Bug found during testing — original version incorrect</div>
+      <p>The original measure used LASTNONBLANK which iterates column values in ascending numeric order — not by date. Because May 2022 P1-EUR (10.96M) is numerically larger than June 2022 (6.63M), LASTNONBLANK returned May as the last non-blank row even though June is the more recent date. The same issue affected the FX rate, which resolved to a 2021 value. Result: Portfolio Value showed 22.45M instead of the correct 14.11M. Discovered by replicating the DAX logic in Python and reverse engineering the output.</p>
+    </div>
+
+    <h3>Original version (incorrect)</h3>
     <div class="code-wrapper">
       <div class="code-header">
-        <span class="code-title">transactions table</span>
-        <span class="code-lang">DAX</span>
+        <span class="code-title">transactions table — original</span>
+        <span class="code-lang" style="color: var(--red);">INCORRECT</span>
       </div>
-      <pre><span class="cm">-- LASTNONBLANK adapts to any date range automatically</span>
-<span class="cm">-- No hard relationship needed between prices/fx and transactions</span>
+      <pre><span class="cm">-- LASTNONBLANK iterates by column value order, not date order</span>
+<span class="cm">-- Returns the row with the highest value, not the most recent date</span>
 <span class="kw">Portfolio Value</span> =
-<span class="kw">VAR</span> MaxDate = <span class="fn">MAX</span>(<span class="tbl">transactions</span>[transaction-date])
-<span class="kw">VAR</span> FXRate =
-    <span class="fn">CALCULATE</span>(
-        <span class="fn">LASTNONBLANK</span>(<span class="tbl">fx</span>[EURUSD], <span class="num">1</span>),
-        <span class="tbl">fx</span>[price-date] <= MaxDate
-    )
+<span class="kw">VAR</span> SelectedDate = <span class="fn">MAX</span>(<span class="tbl">transactions</span>[transaction-date])
 <span class="kw">VAR</span> P1Value =
     <span class="fn">CALCULATE</span>(
         <span class="fn">LASTNONBLANK</span>(<span class="tbl">prices</span>[P1-EUR], <span class="num">1</span>),
-        <span class="tbl">prices</span>[price-date] <= MaxDate
+        <span class="tbl">prices</span>[price-date] <= SelectedDate
     )
 <span class="kw">VAR</span> P2Value =
     <span class="fn">CALCULATE</span>(
         <span class="fn">LASTNONBLANK</span>(<span class="tbl">prices</span>[P2-USD], <span class="num">1</span>),
-        <span class="tbl">prices</span>[price-date] <= MaxDate
+        <span class="tbl">prices</span>[price-date] <= SelectedDate
     )
+<span class="kw">VAR</span> FXRate =
+    <span class="fn">CALCULATE</span>(
+        <span class="fn">LASTNONBLANK</span>(<span class="tbl">fx</span>[EURUSD], <span class="num">1</span>),
+        <span class="tbl">fx</span>[price-date] <= SelectedDate
+    )
+<span class="kw">RETURN</span>
+    (P1Value * FXRate) + P2Value</pre>
+    </div>
+
+    <h3>Corrected version</h3>
+    <div class="code-wrapper">
+      <div class="code-header">
+        <span class="code-title">transactions table — corrected</span>
+        <span class="code-lang">DAX</span>
+      </div>
+      <pre><span class="cm">-- MAXX(FILTER()) explicitly finds the latest date on or before SelectedDate</span>
+<span class="cm">-- Then looks up the value at that exact date — no value-order ambiguity</span>
+<span class="kw">Portfolio Value</span> =
+<span class="kw">VAR</span> SelectedDate = <span class="fn">MAX</span>(<span class="tbl">transactions</span>[transaction-date])
+<span class="kw">VAR</span> PriceDate =
+    <span class="fn">MAXX</span>(
+        <span class="fn">FILTER</span>(<span class="tbl">prices</span>, <span class="tbl">prices</span>[price-date] <= SelectedDate),
+        <span class="tbl">prices</span>[price-date]
+    )
+<span class="kw">VAR</span> FXDate =
+    <span class="fn">MAXX</span>(
+        <span class="fn">FILTER</span>(<span class="tbl">fx</span>, <span class="tbl">fx</span>[price-date] <= SelectedDate),
+        <span class="tbl">fx</span>[price-date]
+    )
+<span class="kw">VAR</span> P1Value = <span class="fn">CALCULATE</span>(<span class="fn">MAX</span>(<span class="tbl">prices</span>[P1-EUR]), <span class="tbl">prices</span>[price-date] = PriceDate)
+<span class="kw">VAR</span> P2Value = <span class="fn">CALCULATE</span>(<span class="fn">MAX</span>(<span class="tbl">prices</span>[P2-USD]), <span class="tbl">prices</span>[price-date] = PriceDate)
+<span class="kw">VAR</span> FXRate  = <span class="fn">CALCULATE</span>(<span class="fn">MAX</span>(<span class="tbl">fx</span>[EURUSD]),    <span class="tbl">fx</span>[price-date] = FXDate)
 <span class="kw">RETURN</span>
     (P1Value * FXRate) + P2Value</pre>
     </div>
 
     <div class="reasoning">
       <div class="reasoning-row">
-        <div class="reasoning-label">Why LASTNONBLANK</div>
-        <div class="reasoning-content">fx and prices tables have different date coverage than transactions. A hard relationship would break when dates don't align between dataset swaps. LASTNONBLANK looks up the most recent available value as of each transaction date — adapts automatically.</div>
+        <div class="reasoning-label">Root Cause</div>
+        <div class="reasoning-content">LASTNONBLANK(column, 1) iterates the column in ascending value order and returns the last non-blank row. With a constant expression of 1, every row is non-blank — so it returns the row with the highest numeric value, not the most recent date.</div>
+      </div>
+      <div class="reasoning-row">
+        <div class="reasoning-label">The Fix</div>
+        <div class="reasoning-content">MAXX(FILTER(table, date &lt;= reference), date) explicitly finds the maximum date on or before the reference date. Then CALCULATE(MAX(value), date = that date) looks up the value at exactly that row. Date logic, not value logic.</div>
+      </div>
+      <div class="reasoning-row">
+        <div class="reasoning-label">How It Was Found</div>
+        <div class="reasoning-content">Python replicated the DAX logic and returned 14.11M. Power BI showed 22.45M. Reverse engineering every prices + FX combination identified May 2022 prices with a June 2021 FX rate as the source. Debug measures in Power BI confirmed LASTNONBLANK was returning 10.96M (May) instead of 6.63M (June).</div>
       </div>
       <div class="reasoning-row">
         <div class="reasoning-label">Why No Hard Join</div>
-        <div class="reasoning-content">Date ranges don't align across dataset swaps. LASTNONBLANK resolves this at calculation time — no Power Query changes needed when new data arrives.</div>
-      </div>
-      <div class="reasoning-row">
-        <div class="reasoning-label">FX Nulls</div>
-        <div class="reasoning-content">5 null EURUSD values exist in the source file. Power Query Fill Down forward-fills them before the model loads. LASTNONBLANK provides a second layer of protection at the DAX level.</div>
+        <div class="reasoning-content">Date ranges don't align across dataset swaps. MAXX FILTER resolves this at calculation time — no Power Query changes needed when new data arrives.</div>
       </div>
     </div>
   </div>
@@ -807,7 +840,7 @@
         <tr>
           <td><span class="measure-name">Portfolio Value</span></td>
           <td>Total value, both portfolios, FX applied</td>
-          <td><span class="tag tag-blue">LASTNONBLANK</span> adapts to any date range</td>
+          <td><span class="tag tag-blue">MAXX FILTER</span> explicit date lookup — replaces LASTNONBLANK</td>
         </tr>
       </tbody>
     </table>
@@ -870,7 +903,7 @@
 <footer>
   <div class="footer-inner">
     <span class="footer-text">Graian Capital Management SA · Data Operations Business Case · April 2026</span>
-    <span class="footer-text footer-gold">Adriele Rocha Weisz </span>
+    <span class="footer-text footer-gold">Adriele Rocha </span>
   </div>
 </footer>
 
